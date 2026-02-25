@@ -27,7 +27,10 @@ def run_corners_lab():
     # Construct the corner detector.
     # Play around with the parameters!
     # When the second argument is true, additional debug visualizations are shown.
+
     det = CornerDetector(metric_type='harris', visualize=True)
+    #det = CornerDetector(metric_type='harmonic_mean', visualize=True)
+    #det = CornerDetector(metric_type='min_eigen', visualize=True)
 
     # Construct the circle estimator
     estimator = CircleEstimator()
@@ -95,9 +98,16 @@ def create_1d_derivated_gaussian_kernel(sigma, radius=0):
 
     # TODO 1: Use create1DGaussianKernel to compute the derivated kernel.
     kernel, x = create_1d_gaussian_kernel(sigma, radius)
-    kernel = kernel # Do something else!
 
-    return kernel, x
+    # Compute the derivative of the kernel using the DoG.
+    #kernel = cv2.GaussianBlur(kernel, (0, 0), sigmaX=1.0, sigmaY=0.0, borderType=cv2.BORDER_REPLICATE) - \
+    #            cv2.GaussianBlur(kernel, (0, 0), sigmaX=1.0, sigmaY=0.0, borderType=cv2.BORDER_REPLICATE)
+
+    derivative_kernel = -x/(sigma*sigma) * kernel
+
+    #print(f"kernel: {kernel}, derivative kernel: {derivative_kernel}")
+
+    return derivative_kernel, x
 
 
 class CornerDetector:
@@ -131,18 +141,21 @@ class CornerDetector:
         """
 
         # TODO 2: Estimate image gradients Ix and Iy by combining _g_kernel and _dg_kernel.
-        ix = np.zeros(image.shape)  # Finish this statement: cv2.sepFilter2D(image, cv2.CV_32F, ?, ?)
-        iy = np.zeros(image.shape)  # Finish this statement: cv2.sepFilter2D(image, cv2.CV_32F, ?, ?)
+        ix = cv2.sepFilter2D(image, cv2.CV_32F, self._dg_kernel, self._g_kernel)
+        iy = cv2.sepFilter2D(image, cv2.CV_32F, self._g_kernel, self._dg_kernel)
 
         # TODO 3.1: Compute the elements of M; A, B and C from Ix and Iy.
-        a = np.zeros(ix.shape)  # Do something else!
-        b = np.zeros(ix.shape)  # Do something else!
-        c = np.zeros(ix.shape)  # Do something else!
+        # a = sum of Ix^2 in the window
+        # b = sum of Ix*Iy in the window
+        # c = sum of Iy^2 in the window
+        a = ix*ix
+        b = ix*iy
+        c = iy*iy
 
         # TODO 3.2: Apply the windowing gaussian win_kernel_ on A, B and C.
-        a = a   # Do something else!
-        b = b   # Do something else!
-        c = c   # Do something else!
+        a = cv2.sepFilter2D(a, cv2.CV_32F, self._win_kernel, self._win_kernel) # a = self._win_kernel * a
+        b = cv2.sepFilter2D(b, cv2.CV_32F, self._win_kernel, self._win_kernel) # b = self._win_kernel * b
+        c = cv2.sepFilter2D(c, cv2.CV_32F, self._win_kernel, self._win_kernel) # c = self._win_kernel * c
 
         # TODO 4: Finish all the corner response functions (see below).
         if self._metric_type == 'harris':
@@ -155,13 +168,17 @@ class CornerDetector:
             raise ValueError("metric_type must be 'harris', 'harmonic_mean' or 'min_eigen'")
 
         # TODO 5: Dilate image to make each pixel equal to the maximum in the neighborhood.
-        local_max = np.zeros(response.shape)  # Do something else!
+        #dilation_kernel = np.ones((1, 1), np.uint8)
+        dilation_kernel = np.ones((3, 3), np.uint8)
+        #dilation_kernel = np.ones((5, 5), np.uint8)
+        local_max = cv2.dilate(response, dilation_kernel)
 
         # TODO 6: Compute the threshold.
-        threshold = 0   # Do something else!
-
+        threshold = response.max() * self._quality_level
+        
         # TODO 7. Extract local maxima above threshold (response > threshold and response == local_max).
         is_strong_and_local_max = np.zeros(response.shape)  # Do something else!
+        is_strong_and_local_max[(response > threshold) & (response == local_max)] = 1
         max_locations = np.transpose(np.nonzero(is_strong_and_local_max))
 
         keypoint_size = 3.0 * self._window_sigma
@@ -183,21 +200,34 @@ class CornerDetector:
     def _harris_metric(a, b, c):
         # TODO 4.1: Finish the Harris metric.
         # Compute the Harris metric for each pixel.
+        # lambda1 * lambda2 - alpha * (lambda1 + lambda2)^2, where lambda1 and lambda2 are the eigenvalues of M.
+        # or 
+        # det(M) - alpha * trace(M)^2
         alpha = 0.06
-        return np.ones(a.shape)  # Do something else!
+        det = a * c - b * b
+        #det = np.linalg.det(np.array([[a, b], [b, c]]))
+        trace = a + c
+        return det - alpha * trace * trace
 
     @staticmethod
     def _harmonic_metric(a, b, c):
         # TODO 4.2 Finish the Harmonic Mean metric
         # Compute the Harmonic Mean metric for each pixel.
-        return np.ones(a.shape)  # Do something else!
+        # lambda1 * lambda2 / (lambda1 + lambda2), where lambda1 and lambda2 are the eigenvalues of M.
+        # or 
+        # det(M) / trace(M)
+        det = a * c - b * b
+        trace = a + c
+        # smoother in the region where lambda1 ≈ lambda2
+        return det/trace
 
     @staticmethod
     def _min_eigen_metric(a, b, c):
         # TODO 4.3 Finish the minimum eigenvalue metric
         # Compute the Min. Eigen metric for each pixel.
-        return np.ones(a.shape)  # Do something else!
-
+        # lambda = 1/2 * (a + c - sqrt(4*b^2 + (a - c)^2)), where lambda is the smallest eigenvalue of M
+        l = 0.5 * (a + c - np.sqrt(4 * b * b + (a - c) * (a - c)))
+        return l
 
 class CircleEstimator:
     """A robust circle estimator based on circle point measurements"""
