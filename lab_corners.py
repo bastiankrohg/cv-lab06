@@ -28,9 +28,13 @@ def run_corners_lab():
     # Play around with the parameters!
     # When the second argument is true, additional debug visualizations are shown.
 
-    det = CornerDetector(metric_type='harris', visualize=True)
-    #det = CornerDetector(metric_type='harmonic_mean', visualize=True)
-    #det = CornerDetector(metric_type='min_eigen', visualize=True)
+    metric_type = 'harris' # faster due to only using image operations
+    #metric_type = 'harmonic_mean' 
+    #metric_type = 'min_eigen' # more accurate result, but takes more time (due to sqrt)
+
+    #det = CornerDetector(metric_type='harris', visualize=True)
+    det = CornerDetector(metric_type=metric_type, visualize=True)
+    #det = CornerDetector(metric_type=metric_type, visualize=False)
 
     # Construct the circle estimator
     estimator = CircleEstimator()
@@ -305,8 +309,8 @@ class CircleEstimator:
 
             # Check if this estimate gave a better result.
             # TODO 8: Remove break and perform the correct test!
-            break       # Remove!
-            if False:   # Perform the correct test!
+            # break       # Remove!
+            if test_num_inliers > best_num_inliers:
                 # Update circle with largest inlier set.
                 best_num_inliers = test_num_inliers
                 best_is_inlier = is_inlier
